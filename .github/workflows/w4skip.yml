@@ -1,0 +1,44 @@
+# w4probe fixture workflow (re-run asset) — CK-05 skipped-job shapes.
+# Every skip class github.com can produce, in one dispatch:
+#   gate  — job-level `if: false`               (the required-context probe job)
+#   mtx   — matrix job under a false job `if`    (does the matrix still expand?)
+#   after — `needs: gate` on a skipped job       (needs-propagation)
+#   mex   — matrix with an excluded cell         (does the excluded cell exist at all?)
+#   green — unconditional success                (control; second required context)
+name: w4skip
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gate:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "never runs (job-level if-false)"
+  mtx:
+    if: ${{ false }}
+    strategy:
+      matrix:
+        arm: [a, b]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "never runs (matrix cell ${{ matrix.arm }} under false job if)"
+  after:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "never runs (needs a skipped job)"
+  mex:
+    strategy:
+      matrix:
+        arm: [a, b]
+        exclude:
+          - arm: a
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "matrix cell ${{ matrix.arm }} (cell a is excluded)"
+  green:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "success control"
