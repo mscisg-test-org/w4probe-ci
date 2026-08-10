@@ -1,0 +1,36 @@
+# w4probe fixture workflow (re-run asset) — check_run/check_suite trigger
+# listener + recursion bait. If github.com delivers check_run/check_suite
+# events from Actions-origin check activity to workflow triggers, runs of
+# THIS workflow appear with event=check_run/check_suite; each run also logs
+# the origin app of the triggering payload. The bait step (dispatch-only,
+# so a real recursion amplifies at most linearly) creates an extra check
+# run via GITHUB_TOKEN — the CK-04-proven App-token write path.
+name: w4recur
+on:
+  check_run:
+    types: [created, rerequested, completed]
+  check_suite:
+    types: [requested, rerequested, completed]
+  workflow_dispatch:
+permissions:
+  checks: write
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: origin
+        run: |
+          echo "w4recur fired: event=${{ github.event_name }} action=${{ github.event.action }}"
+          echo "check_run app: ${{ github.event.check_run.app.slug }} name: ${{ github.event.check_run.name }}"
+          echo "check_suite app: ${{ github.event.check_suite.app.slug }} id: ${{ github.event.check_suite.id }}"
+      - name: bait
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -w '\nHTTP %{http_code}\n' -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/check-runs" \
+            -d "{\"name\":\"w4recur-bait-${GITHUB_RUN_ID}\",\"head_sha\":\"${GITHUB_SHA}\",\"status\":\"completed\",\"conclusion\":\"neutral\",\"output\":{\"title\":\"recursion bait\",\"summary\":\"check run created via GITHUB_TOKEN inside a w4recur run; a recursive check_run:created trigger would spawn another w4recur run\"}}"
