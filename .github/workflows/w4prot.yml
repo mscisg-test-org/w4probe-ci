@@ -1,0 +1,70 @@
+# w4probe fixture workflow (re-run asset) — BP-11 protected-push-as-job-token.
+# Dispatched ON refs/heads/w4prot-classic (classic-protected at dispatch time,
+# so BP-11d records GITHUB_REF_PROTECTED for a protected ref). One commit is
+# made on the checkout, then pushed as the job's GITHUB_TOKEN to:
+#   BP-11a  w4prot-classic — classic protection (required reviews, enforce_admins:false)
+#   BP-11b  w4prot-ruleset — active ruleset (pull_request rule, no bypass actors)
+#   BP-11c  w4prot-open    — unprotected control
+#   BP-11e  REST PUT /contents to the classic-protected branch (API-side bytes)
+name: w4prot
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: BP-11d-env
+        run: |
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_REF_PROTECTED=$GITHUB_REF_PROTECTED"
+          echo "GITHUB_ACTOR=$GITHUB_ACTOR"
+          echo "GITHUB_TRIGGERING_ACTOR=$GITHUB_TRIGGERING_ACTOR"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+      - name: commit
+        run: |
+          git config user.name gh-actions
+          git config user.email actions@github.com
+          echo "probe $(date +%s)" > w4prot-probe.txt
+          git add w4prot-probe.txt
+          git commit -qm "BP-11 job-token push probe"
+      - name: BP-11a-classic
+        run: |
+          echo "=== BP-11a: GITHUB_TOKEN push -> w4prot-classic (classic protection: required reviews, enforce_admins:false) ==="
+          set +e
+          git -c http.extraheader="AUTHORIZATION: bearer $GH_TOKEN" push origin HEAD:w4prot-classic >push.out 2>&1
+          rc=$?
+          set -e
+          cat push.out
+          echo "PUSH_RC=$rc"
+      - name: BP-11b-ruleset
+        run: |
+          echo "=== BP-11b: GITHUB_TOKEN push -> w4prot-ruleset (active ruleset: pull_request rule, no bypass actors) ==="
+          set +e
+          git -c http.extraheader="AUTHORIZATION: bearer $GH_TOKEN" push origin HEAD:w4prot-ruleset >push.out 2>&1
+          rc=$?
+          set -e
+          cat push.out
+          echo "PUSH_RC=$rc"
+      - name: BP-11c-control
+        run: |
+          echo "=== BP-11c: GITHUB_TOKEN push -> w4prot-open (unprotected control) ==="
+          set +e
+          git -c http.extraheader="AUTHORIZATION: bearer $GH_TOKEN" push origin HEAD:w4prot-open >push.out 2>&1
+          rc=$?
+          set -e
+          cat push.out
+          echo "PUSH_RC=$rc"
+      - name: BP-11e-restput
+        run: |
+          echo "=== BP-11e: GITHUB_TOKEN REST PUT /contents -> w4prot-classic (API-side refusal bytes) ==="
+          curl -sS -w '\nHTTP %{http_code}\n' -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/w4prot-rest-probe.txt" \
+            -d "{\"message\":\"BP-11e REST write to protected branch\",\"content\":\"$(printf 'rest probe\n' | base64 -w0)\",\"branch\":\"w4prot-classic\"}"
