@@ -7,7 +7,8 @@
 #   green — unconditional success                (control; second required context)
 name: w4skip
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # dispatch-origin arm (CK-05d..j: suites land on the sha but never associate to a PR)
+  pull_request:        # PR-origin arm (CK-05*2: the rows that feed the PR gate)
 permissions:
   contents: read
 jobs:
